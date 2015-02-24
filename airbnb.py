@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # ============================================================================
 # Airbnb web site scraper, for analysis of Airbnb listings
-# Tom Slee, 2013--2014
+# Tom Slee, 2013--2015
 #
 # function naming conventions:
 #   ws_get = get from web site
@@ -34,10 +34,13 @@ import os
 
 
 # CONSTANTS
+# As of January 2015, the URL country must match your location. I can
+# no longer use .com from Canada.
 URL_ROOM_ROOT = "http://www.airbnb.com/rooms/"
 URL_HOST_ROOT = "http://www.airbnb.com/users/show/"
 URL_SEARCH_ROOT = "http://www.airbnb.com/s/"
 URL_TIMEOUT = 10.0
+
 FILL_MAX_ROOM_COUNT = 50000
 SEARCH_MAX_PAGES = 100
 SEARCH_MAX_GUESTS = 16
@@ -57,16 +60,18 @@ SCRIPT_VERSION_NUMBER = 2.3
 
 # Set up logging
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
+
+ch_formatter = logging.Formatter('%(levelname)-8s%(message)s')
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(logging.INFO)
-ch_formatter = logging.Formatter('%(levelname)-8s%(message)s')
 console_handler.setFormatter(ch_formatter)
+logger.addHandler(console_handler)
+
+fl_formatter = logging.Formatter('%(asctime)-15s %(levelname)-8s%(message)s')
 filelog_handler = logging.FileHandler("run.log")
 filelog_handler.setLevel(logging.INFO)
-fl_formatter = logging.Formatter('%(asctime)-15s %(levelname)-8s%(message)s')
 filelog_handler.setFormatter(fl_formatter)
-logger.addHandler(console_handler)
 logger.addHandler(filelog_handler)
 
 # global database connection
@@ -347,6 +352,18 @@ def db_get_room_to_fill():
         cur.execute(sql)
         (room_id, survey_id) = cur.fetchone()
         cur.close()
+        sql = """
+        select count(*)
+        from room
+        where price is null
+        and deleted != 1
+        """
+        cur = conn.cursor()
+        cur.execute(sql)
+        (rooms_left) = cur.fetchone()
+        cur.close()
+        logger.info("-- " + str(rooms_left[0])
+                    + " rooms left to fill --")
         return (room_id, survey_id)
     except TypeError:
         cur.close()
@@ -590,15 +607,18 @@ def ws_get_page(url):
         attempt = 0
         for attempt in range(MAX_CONNECTION_ATTEMPTS):
             try:
-                response = urllib.request.urlopen(url, timeout=URL_TIMEOUT)
+                req = urllib.request.Request(url,
+                        headers={'User-Agent': 'Mozilla/5.0'})
+                response = urllib.request.urlopen(req, timeout=URL_TIMEOUT)
                 page = response.read()
                 break
             except KeyboardInterrupt:
                 sys.exit()
             except Exception as e:
+                logger.error("Failed attempt to retrieve web page " + url)
                 if attempt >= (MAX_CONNECTION_ATTEMPTS - 1):
-                    logger.error("Probable connectivity problem retrieving "
-                                 "web page")
+                    logger.error("Probable connectivity problem retrieving " +
+                                 "web page " + url)
                     raise
         return page
     except urllib.error.URLError:
@@ -645,7 +665,7 @@ def ws_get_search_page_info(survey_id, search_area_name, room_type,
         url = search_page_url(search_area_name, guests,
                               neighborhood, room_type,
                               page_number)
-        time.sleep(3.0 * random.random())
+        time.sleep(3.0 * random.random()) # be nice
         page = ws_get_page(url)
         if page is False:
             return 0
@@ -713,8 +733,8 @@ def get_room_info_from_page(page, room_id, survey_id, flag):
         host_id = room_type = country = city = None
         neighborhood = address = reviews = overall_satisfaction = None
         accommodates = bedrooms = bathrooms = price = None
-        latitude = longitude = None
-        deleted = minstay = 1
+        latitude = longitude = minstay = None
+        deleted = 1
 
         tree = html.fromstring(page)
         if tree is not None:
@@ -850,6 +870,8 @@ def get_room_info_from_page(page, room_id, survey_id, flag):
         else:
             logger.warning("No neighborhood found for room "
                                + str(room_id))
+        if neighborhood is not None:
+            neighborhood = neighborhood[:50]
 
         # -- address --
         temp = tree.xpath(
@@ -922,10 +944,10 @@ def get_room_info_from_page(page, room_id, survey_id, flag):
         # -- bedrooms --
         # new version Dec 2014
         temp3 = tree.xpath(
-                "//div[@class='col-md-6']"
-                "/div[contains(text(),'Bedrooms:')]"
-                "/strong/text()"
-                )
+            "//div[@class='col-md-6']"
+            "/div[contains(text(),'Bedrooms:')]"
+            "/strong/text()"
+            )
         temp2 = tree.xpath(
             "//div[@id='summary']"
             "//div[@class='panel-body']/div[@class='row'][2]"
@@ -966,39 +988,45 @@ def get_room_info_from_page(page, room_id, survey_id, flag):
             "/following-sibling::td/descendant::text()"
             )
         if len(temp3) > 0:
-            bathrooms = temp3[0].split('+')[0]
+            bathrooms = temp3[0].strip()
         if len(temp2) > 0:
-            bathrooms = temp2[0].split('+')[0]
+            bathrooms = temp2[0].strip()
         elif len(temp1) > 0:
             # try old page match
-            bathrooms = temp1[0].split('+')[0]
+            bathrooms = temp1[0].strip()
         else:
-                logger.info("No bathrooms found for room " + str(room_id))
+            logger.info("No bathrooms found for room " + str(room_id))
         if bathrooms != None:
             bathrooms = bathrooms.split('+')[0]
             bathrooms = bathrooms.split(' ')[0]
 
         # -- minimum stay --
-        temp = tree.xpath(
+        temp3 = tree.xpath(
+            "//div[contains(@class,'col-md-6')"
+            "and text()[contains(.,'minimum stay')]]"
+            "/strong/text()"
+            )
+        temp2 = tree.xpath(
             "//div[@id='details-column']"
             "//div[contains(text(),'Minimum Stay:')]"
             "/strong/text()"
             )
-        if len(temp) > 0:
-            minstay = temp[0]
-            non_decimal = re.compile(r'[^\d.]+')
-            minstay = non_decimal.sub('', minstay)
+        temp1 = tree.xpath(
+            "//table[@id='description_details']"
+            "//td[text()[contains(.,'Minimum Stay:')]]"
+            "/following-sibling::td/descendant::text()"
+            )
+        if len(temp3) > 0:
+            minstay = temp3[0].strip()
+        elif len(temp2) > 0:
+            minstay = temp2[0].strip()
+        elif len(temp1) > 0:
+            minstay = temp1[0].strip()
         else:
-            # try old page match
-            temp = tree.xpath("//table[@id='description_details']"
-                              "//td[text()[contains(.,'Minimum Stay:')]]"
-                              "/following-sibling::td/descendant::text()")
-            if len(temp) > 0:
-                minstay = temp[0]
-                non_decimal = re.compile(r'[^\d.]+')
-                minstay = non_decimal.sub('', minstay)
-            else:
-                logger.info("No minstay found for room " + str(room_id))
+            logger.info("No minstay found for room " + str(room_id))
+        if minstay != None:
+            minstay = minstay.split('+')[0]
+            minstay = minstay.split(' ')[0]
 
         # -- price --
         # Find the price listed (which is returned in Cdn dollars)
@@ -1086,7 +1114,7 @@ def fill_loop_by_room():
             if room_id is None:
                 break
             else:
-                time.sleep(3.0 * random.random())
+                time.sleep(3.0 * random.random()) # be nice
                 if(ws_get_room_info(room_id, survey_id, FLAGS_ADD)):
                     room_count += 1
         except AttributeError as ae:

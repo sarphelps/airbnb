@@ -5,11 +5,11 @@
 --
 
 
--- Database file: /home/tom/src/airbnb/dbnb.db
+-- Database file: /home/tom/src/airbnb/db/dbnb.db
 -- Database CHAR collation: UTF8BIN, NCHAR collation: UCA
 -- Connection Character Set: UTF-8
 --
--- CREATE DATABASE command: CREATE DATABASE '/home/tom/src/airbnb/dbnb.db' LOG ON '/home/tom/src/airbnb/dbnb.log' PAGE SIZE 4096 COLLATION 'UTF8BIN(CaseSensitivity=Ignore)' NCHAR COLLATION 'UCA(CaseSensitivity=Ignore;AccentSensitivity=Ignore;PunctuationSensitivity=Primary)' BLANK PADDING OFF JCONNECT ON CHECKSUM ON SYSTEM PROC AS DEFINER OFF
+-- CREATE DATABASE command: CREATE DATABASE '/home/tom/src/airbnb/db/dbnb.db' LOG ON '/home/tom/src/airbnb/db/dbnb.log' PAGE SIZE 4096 COLLATION 'UTF8BIN(CaseSensitivity=Ignore)' NCHAR COLLATION 'UCA(CaseSensitivity=Ignore;AccentSensitivity=Ignore;PunctuationSensitivity=Primary)' BLANK PADDING OFF JCONNECT ON CHECKSUM ON SYSTEM PROC AS DEFINER OFF
 --
 
 
@@ -54,10 +54,19 @@ go
 GRANT CONNECT TO "DBA" IDENTIFIED BY sql
 go
 
+GRANT CONNECT TO "airbnb"
+go
+
 
 -------------------------------------------------
 --   Create role definitions
 -------------------------------------------------
+
+CREATE ROLE FOR USER "airbnb"
+go
+
+CREATE OR REPLACE ROLE FOR USER "airbnb" WITH ADMIN ONLY "SYS_MANAGE_ROLES_ROLE"
+go
 
 GRANT ROLE "SYS_AUTH_DBA_ROLE" TO "DBA" WITH ADMIN OPTION WITH NO SYSTEM PRIVILEGE INHERITANCE
 go
@@ -49648,11 +49657,12 @@ go
 CREATE TABLE "DBA"."survey_search_page" (
     "survey_id"                      integer NOT NULL
    ,"room_type"                      varchar(255) NOT NULL
-   ,"neighborhood_id"                integer NOT NULL
+   ,"neighborhood_id"                integer NULL
    ,"page_number"                    integer NOT NULL
    ,"guests"                         integer NOT NULL
    ,"has_rooms"                      bit NULL
-   ,PRIMARY KEY ("survey_id" ASC,"room_type" ASC,"neighborhood_id" ASC,"page_number" ASC,"guests" ASC) 
+   ,"page_id"                        bigint NOT NULL DEFAULT autoincrement
+   ,PRIMARY KEY ("page_id" ASC) 
 )
 go
 
@@ -49660,7 +49670,7 @@ COMMENT ON TABLE "DBA"."survey_search_page" IS
 	'This table tracks search progress during the first stage of a survey, to avoid going through all the rooms again and again. Once a survey is complete, the rows could be deleted for that survey.'
 go
 
-CREATE TABLE "DBA"."organization" (
+CREATE TABLE "DBA"."peers" (
     "id"                             integer NOT NULL
    ,"company"                        varchar(255) NULL
    ,"area"                           varchar(255) NULL
@@ -49689,12 +49699,136 @@ CREATE TABLE "DBA"."planning_neighborhoods" (
 )
 go
 
-CREATE TABLE "DBA"."planning_neighborhoods_4269" (
+CREATE TABLE "airbnb"."report_berlin" (
+    "neighborhood"                   varchar(255) NOT NULL
+   ,"hosts"                          integer NULL
+   ,"earnings"                       "money" NULL
+   ,"currency"                       varchar(10) NULL
+   ,"guests"                         integer NULL
+   ,"spending"                       "money" NULL
+   ,PRIMARY KEY ("neighborhood" ASC) 
+)
+go
+
+CREATE TABLE "DBA"."los_angeles_census_tracts" (
     "record_number"                  integer NOT NULL
    ,"geometry"                       ST_Geometry(SRID=4269) NOT NULL
-   ,"neighborho"                     varchar(25) NOT NULL
+   ,"GEOID10"                        varchar(11) NOT NULL
+   ,"CT10"                           varchar(6) NOT NULL
+   ,"LABEL"                          varchar(7) NOT NULL
+   ,"X_Center"                       decimal(30,6) NOT NULL
+   ,"Y_Center"                       decimal(30,6) NOT NULL
+   ,"Shape_area"                     decimal(30,6) NOT NULL
+   ,"Shape_len"                      decimal(30,6) NOT NULL
    ,PRIMARY KEY ("record_number" ASC) 
 )
+go
+
+CREATE TABLE "DBA"."gis_los_angeles_ct2010" (
+    "record_number"                  integer NOT NULL
+   ,"geometry"                       ST_Geometry(SRID=2229) NOT NULL
+   ,"GEOID10"                        varchar(11) NOT NULL
+   ,"CT10"                           varchar(6) NOT NULL
+   ,"LABEL"                          varchar(7) NOT NULL
+   ,"X_Center"                       decimal(30,6) NOT NULL
+   ,"Y_Center"                       decimal(30,6) NOT NULL
+   ,"Shape_area"                     decimal(30,6) NOT NULL
+   ,"Shape_len"                      decimal(30,6) NOT NULL
+   ,PRIMARY KEY ("record_number" ASC) 
+)
+go
+
+COMMENT ON TABLE "DBA"."gis_los_angeles_ct2010" IS 
+	'Census tract boundaries from the CT2010 census.'
+go
+
+CREATE TABLE "dbo"."maint_plan" (
+    "plan_id"                        unsigned int NOT NULL DEFAULT autoincrement
+   ,"plan_name"                      varchar(128) NOT NULL
+   ,"event_name"                     varchar(128) NULL
+   ,"disable_new_connections"        bit NOT NULL
+   ,"disconnect_all_users"           bit NOT NULL
+   ,"do_validate"                    bit NOT NULL
+   ,"validate_database_check"        bit NOT NULL
+   ,"validate_checksum_check"        bit NOT NULL
+   ,"validate_express_check"         bit NOT NULL
+   ,"validate_normal_check"          bit NOT NULL
+   ,"do_backup"                      bit NOT NULL
+   ,"disk_backup"                    bit NOT NULL
+   ,"full_backup"                    bit NOT NULL
+   ,"archive_backup"                 bit NOT NULL
+   ,"backup_path"                    long varchar NULL
+   ,"tape_backup_prompt"             bit NOT NULL
+   ,"tape_backup_comment"            long varchar NULL
+   ,"save_report_count"              integer NULL
+   ,"report_to_console"              bit NOT NULL
+   ,"email_success"                  bit NOT NULL
+   ,"email_failure"                  bit NOT NULL
+   ,"email_recipients"               long varchar NULL
+   ,"email_smtp_server_name"         long varchar NULL
+   ,"email_smtp_port"                integer NULL
+   ,"email_smtp_sender_name"         long varchar NULL
+   ,"email_smtp_sender_address"      long varchar NULL
+   ,"email_smtp_auth_user_name"      long varchar NULL
+   ,"email_smtp_auth_password"       long varchar NULL
+   ,"email_user_id"                  long varchar NULL
+   ,"email_user_password"            long varchar NULL
+   ,"email_smtp_trusted_certificates" long varchar NULL
+   ,"email_smtp_certificate_company" long varchar NULL
+   ,"email_smtp_certificate_unit"    long varchar NULL
+   ,"email_smtp_certificate_name"    long varchar NULL
+   ,"custom_prevalidation_sql"       long varchar NULL
+   ,"custom_postbackup_sql"          long varchar NULL
+   ,"email_smtp_trusted_cert_in_db"  long varchar NULL
+   ,CONSTRAINT "maint_plan_pk" PRIMARY KEY ("plan_id" ASC) 
+)
+go
+
+ALTER TABLE "dbo"."maint_plan"
+    ADD CONSTRAINT "maint_plan_uc" UNIQUE ( "plan_name" )
+go
+
+CREATE TABLE "dbo"."maint_plan_report" (
+    "plan_id"                        unsigned int NOT NULL
+   ,"start_time"                     timestamp NOT NULL
+   ,"finish_time"                    timestamp NULL
+   ,"success"                        bit NOT NULL
+   ,"report"                         long varchar NULL
+   ,CONSTRAINT "maint_plan_report_pk" PRIMARY KEY ("plan_id" ASC,"start_time" ASC) 
+)
+go
+
+CREATE GLOBAL TEMPORARY TABLE "dbo"."maint_plan_status" (
+    "plan_id"                        unsigned int NOT NULL
+   ,"connection_id"                  integer NOT NULL
+   ,"status"                         char(20) NOT NULL
+   ,"percent_complete"               integer NULL
+   ,CONSTRAINT "maint_plan_status_pk" PRIMARY KEY ("plan_id" ASC) 
+) NOT TRANSACTIONAL SHARE BY ALL
+go
+
+CREATE TABLE "DBA"."gis_barcelona" (
+    "record_number"                  integer NOT NULL
+   ,"geometry"                       ST_Geometry(SRID=23031) NOT NULL
+   ,"OBJECTID"                       bigint NOT NULL
+   ,"District"                       varchar(2) NOT NULL
+   ,"NDistric"                       varchar(30) NOT NULL
+   ,"CBarri"                         varchar(2) NOT NULL
+   ,"NBarri"                         varchar(50) NOT NULL
+   ,"Homes"                          decimal(30,6) NOT NULL
+   ,"Dones"                          decimal(30,6) NOT NULL
+   ,"Perimetr"                       decimal(30,6) NOT NULL
+   ,"Area"                           decimal(30,6) NOT NULL
+   ,"Coord_X"                        decimal(30,6) NOT NULL
+   ,"Coord_Y"                        decimal(30,6) NOT NULL
+   ,"Shape_Area"                     decimal(30,6) NOT NULL
+   ,"Shape_Leng"                     decimal(30,6) NOT NULL
+   ,PRIMARY KEY ("record_number" ASC) 
+)
+go
+
+COMMENT ON TABLE "DBA"."gis_barcelona" IS 
+	'SRID: 23031'
 go
 
 commit work
@@ -49741,9 +49875,15 @@ ALTER TABLE "DBA"."survey_search_page"
 go
 
 ALTER TABLE "DBA"."survey_search_page"
-    ADD NOT NULL FOREIGN KEY "neighborhood" ("neighborhood_id" ASC)
+    ADD FOREIGN KEY "neighborhood" ("neighborhood_id" ASC)
     REFERENCES "DBA"."neighborhood" ("neighborhood_id")
     
+go
+
+ALTER TABLE "dbo"."maint_plan_report"
+    ADD NOT NULL FOREIGN KEY "maint_plan_report_fk" ("plan_id" ASC)
+    REFERENCES "dbo"."maint_plan" ("plan_id")
+    ON DELETE CASCADE CHECK ON COMMIT 
 go
 
 commit work
@@ -49764,38 +49904,60 @@ go
 --   Create indexes
 -------------------------------------------------
 
-call sa_unload_display_table_status( 17738, 1, 10, 'DBA', 'room' )
+call sa_unload_display_table_status( 17738, 1, 16, 'DBA', 'room' )
 go
 
 CREATE INDEX "idx_location" ON "DBA"."room"
     ( "location" )
 go
 
-call sa_unload_display_table_status( 17738, 2, 10, 'DBA', 'search_area' )
+call sa_unload_display_table_status( 17738, 2, 16, 'DBA', 'search_area' )
 go
 
-call sa_unload_display_table_status( 17738, 3, 10, 'DBA', 'city' )
+call sa_unload_display_table_status( 17738, 3, 16, 'DBA', 'city' )
 go
 
-call sa_unload_display_table_status( 17738, 4, 10, 'DBA', 'neighborhood' )
+call sa_unload_display_table_status( 17738, 4, 16, 'DBA', 'neighborhood' )
 go
 
-call sa_unload_display_table_status( 17738, 5, 10, 'DBA', 'survey' )
+call sa_unload_display_table_status( 17738, 5, 16, 'DBA', 'survey' )
 go
 
-call sa_unload_display_table_status( 17738, 6, 10, 'DBA', 'survey_search_page' )
+call sa_unload_display_table_status( 17738, 6, 16, 'DBA', 'survey_search_page' )
 go
 
-call sa_unload_display_table_status( 17738, 7, 10, 'DBA', 'organization' )
+call sa_unload_display_table_status( 17738, 7, 16, 'DBA', 'peers' )
 go
 
-call sa_unload_display_table_status( 17738, 8, 10, 'DBA', 'map_sanfrancisco' )
+call sa_unload_display_table_status( 17738, 8, 16, 'DBA', 'map_sanfrancisco' )
 go
 
-call sa_unload_display_table_status( 17738, 9, 10, 'DBA', 'planning_neighborhoods' )
+call sa_unload_display_table_status( 17738, 9, 16, 'DBA', 'planning_neighborhoods' )
 go
 
-call sa_unload_display_table_status( 17738, 10, 10, 'DBA', 'planning_neighborhoods_4269' )
+call sa_unload_display_table_status( 17738, 10, 16, 'airbnb', 'report_berlin' )
+go
+
+call sa_unload_display_table_status( 17738, 11, 16, 'DBA', 'los_angeles_census_tracts' )
+go
+
+call sa_unload_display_table_status( 17738, 12, 16, 'DBA', 'gis_los_angeles_ct2010' )
+go
+
+CREATE INDEX "ixc_DBA_index_consultant0_1" ON "DBA"."gis_los_angeles_ct2010"
+    ( "CT10" )
+go
+
+call sa_unload_display_table_status( 17738, 13, 16, 'dbo', 'maint_plan' )
+go
+
+call sa_unload_display_table_status( 17738, 14, 16, 'dbo', 'maint_plan_report' )
+go
+
+call sa_unload_display_table_status( 17738, 15, 16, 'dbo', 'maint_plan_status' )
+go
+
+call sa_unload_display_table_status( 17738, 16, 16, 'DBA', 'gis_barcelona' )
 go
 
 commit work
@@ -49884,71 +50046,6 @@ on r.survey_id = s.survey_id
 where deleted = 0
 and r.price is not null
 group by survey, city, rating
-}
-go
-
-create view "DBA"."churn_room"
-  as select "cs"."city",
-    "r"."room_id",
-    if "max"("r"."survey_id") = "cs"."newer" then
-      "max"("r"."survey_id")
-    else null
-    endif as "newer_appearance",
-    if "min"("r"."survey_id") = "cs"."older" then
-      "min"("r"."survey_id")
-    else null
-    endif as "older_appearance",
-    "cs"."newer",
-    "cs"."older"
-    from "DBA"."room" as "r" join "DBA"."city_survey" as "cs" on(
-      "r"."survey_id" = "cs"."newer"
-      or "r"."survey_id" = "cs"."older")
-    group by "cs"."city","r"."room_id","cs"."newer","cs"."older"
-go
-
-COMMENT ON VIEW "DBA"."churn_room" IS 
-	'For cities with multiple surveys, this view lists all rooms, and their appearance in the earliest and latest survey for the city.'
-go
-
-COMMENT TO PRESERVE FORMAT ON VIEW "DBA"."churn_room" IS 
-{create VIEW DBA."churn_room" as
-SELECT cs.city, 
-        r.room_id, 
-        if max(survey_id) = cs.newer 
-            then max(survey_id) 
-            else null 
-            endif newer_appearance,
-        if min(survey_id) = cs.older 
-            then min(survey_id) 
-            else null 
-            endif older_appearance,
-        cs.newer, 
-        cs.older
-FROM room r join city_survey cs
-on r.survey_id = cs.newer
-or r.survey_id = cs.older
-group by cs.city, r.room_id, cs.newer, cs.older
-}
-go
-
-create view "DBA"."lost_room_ids" as
-  select "r"."room_id"
-    from "DBA"."city_survey" as "cs" join "DBA"."room" as "r"
-      on "cs"."older" = "r"."survey_id" except
-  select "r"."room_id"
-    from "DBA"."city_survey" as "cs" join "DBA"."room" as "r"
-      on "cs"."newer" = "r"."survey_id"
-go
-
-COMMENT TO PRESERVE FORMAT ON VIEW "DBA"."lost_room_ids" IS 
-{create VIEW DBA."lost_room_ids" as
-select room_id
-from city_survey cs join room r
-on cs.older = r.survey_id
-except 
-select room_id
-from city_survey cs join room r
-on cs.newer = r.survey_id
 }
 go
 
@@ -50054,27 +50151,6 @@ from room
 }
 go
 
-create view "DBA"."lost_host_ids" as
-  select distinct "r"."host_id"
-    from "DBA"."city_survey" as "cs" join "DBA"."room" as "r"
-      on "cs"."older" = "r"."survey_id" except
-  select distinct "r"."host_id"
-    from "DBA"."city_survey" as "cs" join "DBA"."room" as "r"
-      on "cs"."newer" = "r"."survey_id"
-go
-
-COMMENT TO PRESERVE FORMAT ON VIEW "DBA"."lost_host_ids" IS 
-{create VIEW DBA."lost_host_ids" as
-select distinct host_id
-from city_survey cs join room r
-on cs.older = r.survey_id
-except 
-select distinct host_id
-from city_survey cs join room r
-on cs.newer = r.survey_id
-}
-go
-
 create view "DBA"."survey_room_types"( "survey","city","listings","bookings",
   "private_rooms","entire_homes","shared_rooms",
   "private_room_bookings","entire_home_bookings","shared_room_bookings",
@@ -50160,8 +50236,11 @@ create view "DBA"."host"
     "count"(distinct "room"."address") as "addresses",
     "sum"("room"."reviews"*"room"."price") as "income1",
     "sum"("room"."reviews"*"room"."price"*"room"."minstay") as "income2"
-    from "DBA"."room" where
-    "room"."host_id" is not null
+    from "DBA"."room"
+    where "room"."host_id" is not null
+    and "room"."price" is not null
+    and "room"."minstay" is not null
+    and "room"."deleted" = 0
     group by "room"."survey_id","room"."host_id"
 go
 
@@ -50178,6 +50257,9 @@ select
     sum(reviews * price * minstay) income2
 from room
 where host_id is not null
+and price is not null
+and minstay is not null
+and deleted = 0
 group by survey_id, host_id
 }
 go
@@ -50222,13 +50304,14 @@ result(
   "last_modified" timestamp,
   "latitude" numeric(30,6),
   "longitude" numeric(30,6),
+  "location" ST_Point,
   "survey_id" integer ) 
 begin
   select "room_id","host_id","room_type",
     "country","city","neighborhood","address","reviews",
     "overall_satisfaction","accommodates","bedrooms",
     "bathrooms","price","deleted","minstay","last_modified",
-    "latitude","longitude","survey_id"
+    "latitude","longitude","location","survey_id"
     from "room" as "r"
     where "r"."survey_id" = @survey_id
     and "price" is not null
@@ -50261,6 +50344,7 @@ result (
     last_modified timestamp,
     latitude numeric (30,6),
     longitude numeric(30,6),
+    location st_point,
     survey_id int
 )
 BEGIN
@@ -50268,7 +50352,7 @@ select room_id, host_id, room_type,
     country, city, neighborhood, address, reviews,
     overall_satisfaction, accommodates, bedrooms,
     bathrooms, price, deleted, minstay, last_modified,
-    latitude, longitude, survey_id
+    latitude, longitude, location, survey_id
 from room r
 where r.survey_id = @survey_id
 and price is not null
@@ -50491,80 +50575,29 @@ END
 }
 go
 
-create procedure "DBA"."lost_room"( @search_area_name varchar(255) ) 
+create procedure "DBA"."lost_room"( in @old_survey_id integer,in @new_survey_id integer ) 
+result( "room_id" integer ) 
 begin
-  declare @old_survey_id integer;
-  declare @new_survey_id integer;
-  select "min"("survey_id"),"max"("survey_id")
-    into @old_survey_id,@new_survey_id
-    from "survey" as "s" key join "search_area" as "sa"
-    where "sa"."name" = @search_area_name;
-  select *
+  select "room_id"
     from "survey_room"(@old_survey_id)
     where "room_id" = any(
-    select "room_id" from "survey_room"(@old_survey_id) except
-    select "room_id" from "survey_room"(@new_survey_id))
+    select "room_id" from "room" where "survey_id" = @old_survey_id except
+    select "room_id" from "room" where "survey_id" = @new_survey_id)
 end
 go
 
 COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."lost_room" IS 
-{create procedure lost_room(@search_area_name varchar(255))
+{create PROCEDURE DBA."lost_room"(@old_survey_id int, @new_survey_id int)
+result (room_id int)
 begin
-declare @old_survey_id int;
-declare @new_survey_id int;
-select min(survey_id), max(survey_id)
-into @old_survey_id, @new_survey_id
-from survey s key join search_area sa
-where sa.name = @search_area_name;
-
-select * 
-from survey_room(@old_survey_id)
-where room_id in
-(
-select room_id from survey_room(@old_survey_id)
-except
-select room_id from survey_room(@new_survey_id)
-);
-end
-}
-go
-
-create procedure "DBA"."lost_host"( @search_area_name varchar(255) ) 
-begin
-  declare @old_survey_id integer;
-  declare @new_survey_id integer;
-  select "min"("survey_id"),"max"("survey_id")
-    into @old_survey_id,@new_survey_id
-    from "survey" as "s" key join "search_area" as "sa"
-    where "sa"."name" = @search_area_name;
-  select "host_id","rooms","multilister","revs","addresses","income1"
-    from "survey_host"(@old_survey_id)
-    where "host_id" = any(
-    select "host_id" from "survey_host"(@old_survey_id) except
-    select "host_id" from "survey_host"(@new_survey_id))
-end
-go
-
-COMMENT ON PROCEDURE "DBA"."lost_host" IS 
-	'List hosts who have left the site between the earliest and latest surveys, for a city'
-go
-
-COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."lost_host" IS 
-{create procedure lost_host(@search_area_name varchar(255))
-begin
-declare @old_survey_id int;
-declare @new_survey_id int;
-select min(survey_id), max(survey_id)
-into @old_survey_id, @new_survey_id
-from survey s key join search_area sa
-where sa.name = @search_area_name;
-
-select host_id, rooms, multilister, revs, addresses, income1 
-from survey_host(@old_survey_id)
-where host_id in (
-select host_id from survey_host(@old_survey_id)
-except
-select host_id from survey_host(@new_survey_id));
+    select room_id 
+    from survey_room(@old_survey_id)
+    where room_id in
+        (
+        select room_id from room where survey_id = @old_survey_id
+        except
+        select room_id from room where survey_id = @new_survey_id
+        );
 end
 }
 go
@@ -50583,13 +50616,13 @@ COMMENT ON PROCEDURE "DBA"."add_survey" IS
 go
 
 COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."add_survey" IS 
-{create procedure add_survey(@city varchar(255))
+{create PROCEDURE DBA."add_survey"(@city varchar(255))
 begin
-insert survey(survey_description, search_area_id)
+insert into survey (survey_description, search_area_id)
 on existing skip 
-select (name || ' (' || current date || ')') survey_description, search_area_id 
-from search_area
-where name = @city
+    select (name || ' (' || current date || ')') survey_description, search_area_id 
+    from search_area
+    where name = @city
 end
 }
 go
@@ -50668,36 +50701,14 @@ end
 }
 go
 
-create procedure "DBA"."lost_rooms"( @old_survey integer,@new_survey integer ) 
+create procedure "DBA"."new_room"( in @old_survey_id integer,in @new_survey_id integer ) 
+result( "room_id" integer ) 
 begin
-  select "room_id" from "survey_room"(@old_survey) except
-  select "room_id" from "survey_room"(@new_survey)
-end
-go
-
-COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."lost_rooms" IS 
-{create procedure lost_rooms(@old_survey int, @new_survey int)
-begin
-select room_id from survey_room(@old_survey)
-except
-select room_id from survey_room(@new_survey);
-end
-}
-go
-
-create procedure "DBA"."new_room"( @search_area_name varchar(255) ) 
-begin
-  declare @old_survey_id integer;
-  declare @new_survey_id integer;
-  select "min"("survey_id"),"max"("survey_id")
-    into @old_survey_id,@new_survey_id
-    from "survey" as "s" key join "search_area" as "sa"
-    where "sa"."name" = @search_area_name;
-  select *
-    from "survey_room"(@new_survey_id)
+  select "room_id"
+    from "room"
     where "room_id" = any(
-    select "room_id" from "survey_room"(@new_survey_id) except
-    select "room_id" from "survey_room"(@old_survey_id))
+    select "room_id" from "room" where "survey_id" = @new_survey_id except
+    select "room_id" from "room" where "survey_id" = @old_survey_id)
 end
 go
 
@@ -50706,32 +50717,27 @@ COMMENT ON PROCEDURE "DBA"."new_room" IS
 go
 
 COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."new_room" IS 
-{create PROCEDURE DBA."new_room"(@search_area_name varchar(255))
+{create PROCEDURE DBA."new_room"(@old_survey_id int, @new_survey_id int )
+result (room_id int)
 begin
-declare @old_survey_id int;
-declare @new_survey_id int;
-select min(survey_id), max(survey_id)
-into @old_survey_id, @new_survey_id
-from survey s key join search_area sa
-where sa.name = @search_area_name;
-
-select * 
-from survey_room(@new_survey_id)
+select room_id 
+from room
 where room_id in
-(
-select room_id from survey_room(@new_survey_id)
-except
-select room_id from survey_room(@old_survey_id)
-);
+    (
+    select room_id from room where survey_id = @new_survey_id
+    except
+    select room_id from room where survey_id = @old_survey_id
+    );
 end
 }
 go
 
 create procedure "DBA"."room_income"( in @survey_id integer ) 
-result( "room_id" integer,"room_type" varchar(255),"price" real,"income" real,"rank" integer,"lon" numeric(30,6),"lat" numeric(30,6) ) 
+result( "room_id" integer,"room_type" varchar(255),"host_id" integer,"price" real,"income" real,"rank" integer,"lon" numeric(30,6),"lat" numeric(30,6) ) 
 begin
   select "room_id",
     "room_type",
+    "host_id",
     "price",
     ("price"*"reviews") as "income",
     "row_number"() over("window_income") as "rank",
@@ -50744,12 +50750,17 @@ begin
 end
 go
 
+COMMENT ON PROCEDURE "DBA"."room_income" IS 
+	'Reenue-related properties for rooms in a survey, intended for use in exporting KML.'
+go
+
 COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."room_income" IS 
-{create procedure room_income(@survey_id int) 
-result ( room_id int, room_type varchar(255), price float, income float, rank int, lon numeric(30,6), lat numeric(30,6))
+{create PROCEDURE DBA."room_income"(@survey_id int) 
+result ( room_id int, room_type varchar(255), host_id int, price float, income float, rank int, lon numeric(30,6), lat numeric(30,6))
 begin
 select room_id, 
     room_type, 
+    host_id,
     price, 
     (price * reviews) as income,
     row_number() over (window_income) as "rank",
@@ -50767,6 +50778,7 @@ create procedure "DBA"."export_survey_csv"( in @survey_id integer )
 begin
   declare @filename varchar(255);
   set @filename = './reports/survey_' || convert(varchar(4),@survey_id) || '.csv';
+  set option "allow_write_client_file" = 'ON';
   unload
     select "room_id","host_id","room_type",
       "country","city","neighborhood","address",
@@ -50789,6 +50801,7 @@ COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."export_survey_csv" IS
 BEGIN  
     DECLARE @filename VARCHAR(255);
     SET @filename = './reports/survey_' || convert(VARCHAR(4), @survey_id) || '.csv';
+    set option "allow_write_client_file" = 'ON';
     unload 
         select 
             room_id, host_id, room_type, 
@@ -50812,8 +50825,8 @@ begin
   select '<?xml version="1.0" encoding="UTF-8"?>  \x0A    <kml xmlns="http://www.opengis.net/kml/2.2">  \x0A    <Document>\x0A    '
      || "LIST"(
     "XMLGEN"(
-    '  \x0A  <Placemark>  \x0A  <name>{$room_id}</name>  \x0A  <ExtendedData>\x0A  <Data name="room_type">\x0A    <value>{$room_type}</value>\x0A  </Data> \x0A  <Data name="price">\x0A      <value>{$price}</value>\x0A  </Data> \x0A  <Data name="income">\x0A      <value>{$income}</value>\x0A  </Data> \x0A  <Data name="rank">\x0A      <value>{$rank}</value>\x0A  </Data> \x0A  </ExtendedData>\x0A  <Point>  \x0A  <coordinates>{$lon},{$lat},0</coordinates>  \x0A  </Point>  \x0A  </Placemark>',
-    "room_id","room_type",
+    '  \x0A  <Placemark>  \x0A  <name>{$room_id}</name>  \x0A  <ExtendedData>\x0A  <Data name="room_type">\x0A    <value>{$room_type}</value>\x0A  </Data> \x0A  <Data name="host">\x0A      <value>{$host_id}</value>\x0A  </Data> \x0A  <Data name="price">\x0A      <value>{$price}</value>\x0A  </Data> \x0A  <Data name="income">\x0A      <value>{$income}</value>\x0A  </Data> \x0A  <Data name="rank">\x0A      <value>{$rank}</value>\x0A  </Data> \x0A  </ExtendedData>\x0A  <Point>  \x0A  <coordinates>{$lon},{$lat},0</coordinates>  \x0A  </Point>  \x0A  </Placemark>',
+    "room_id","room_type","host_id",
     "price","income",
     "rank","lon","lat"),null)
      || '   \x0A   </Document>  \x0A</kml>'
@@ -50844,6 +50857,9 @@ BEGIN
   <Data name="room_type">
     <value>{$room_type}</value>
   </Data> 
+  <Data name="host">
+      <value>{$host_id}</value>
+  </Data> 
   <Data name="price">
       <value>{$price}</value>
   </Data> 
@@ -50858,7 +50874,7 @@ BEGIN
   <coordinates>{$lon},{$lat},0</coordinates>  
   </Point>  
   </Placemark>'', 
-    room_id, room_type, 
+    room_id, room_type, host_id, 
     price, income,
     "rank", lon, lat), NULL)  ||''   
    </Document>  
@@ -50866,6 +50882,270 @@ BEGIN
 FROM room_income(@survey_id); 
   CALL xp_write_file(@filename, @result);  
 END'
+go
+
+create procedure "DBA"."room_history"( in @search_area_id integer ) 
+result( "room_id" integer,"host_id" integer,"room_type" varchar(255),
+  "country" varchar(255),"city" varchar(255),
+  "neighborhood" varchar(255),"address" varchar(1023),
+  "reviews" integer,"overall_satisfaction" real,
+  "accommodates" integer,"bedrooms" decimal(5,2),
+  "bathrooms" decimal(5,2),"price" real,
+  "deleted" integer,"minstay" integer,"last_modified" timestamp,
+  "latitude" numeric(30,6),"longitude" numeric(30,6),
+  "survey_id" integer,
+  "survey_date" date ) 
+begin
+  select "r"."room_id","r"."host_id","r"."room_type",
+    "r"."country","r"."city","r"."neighborhood","r"."address",
+    "r"."reviews","r"."overall_satisfaction","r"."accommodates",
+    "r"."bedrooms","r"."bathrooms","r"."price","r"."deleted",
+    "r"."minstay","r"."last_modified","r"."latitude","r"."longitude",
+    "r"."survey_id" as "s_id","s"."survey_date"
+    from "room" as "r" key join "survey" as "s" key join "search_area" as "sa"
+    where "sa"."search_area_id" = @search_area_id
+    and "r"."deleted" = 0
+    and not "r"."room_id"
+     = any(select "r"."room_id"
+      from "room" as "r" key join "survey" as "s" key join "search_area" as "sa"
+      where "sa"."search_area_id" = @search_area_id
+      and "s"."survey_id" > "s_id")
+end
+go
+
+COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."room_history" IS 
+{create procedure room_history(@search_area_id int)
+result (room_id int, host_id int, room_type varchar(255),
+            country varchar(255), city varchar(255),
+            neighborhood varchar(255), address varchar(1023),
+            reviews int, overall_satisfaction float,
+            accommodates int, bedrooms decimal(5,2),
+            bathrooms decimal(5,2), price float,
+            deleted int, minstay int, last_modified timestamp,
+            latitude numeric(30,6), longitude numeric(30,6),
+            survey_id int, survey_date date 
+)
+begin
+select  r.room_id, r.host_id, r.room_type,
+        r.country, r.city, r.neighborhood, r.address,
+        r.reviews, r.overall_satisfaction, r.accommodates,
+        r.bedrooms, r.bathrooms, r.price, r.deleted,
+        r.minstay, r.last_modified, r.latitude, r.longitude,
+        r.survey_id s_id, s.survey_date
+from room r key join survey s key join search_area sa
+where sa.search_area_id = @search_area_id
+and r.deleted = 0
+and r.room_id not in (
+    select r.room_id
+    from room r key join survey s key join search_area sa
+    where sa.search_area_id = @search_area_id
+    and s.survey_id > s_id
+)
+end
+}
+go
+
+create procedure "DBA"."update_location"()
+begin
+  update "room"
+    set "location" = new "st_point"("longitude","latitude",4326)
+    where "location" is null
+end
+go
+
+COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."update_location" IS 
+{create PROCEDURE DBA."update_location"()
+begin
+update room
+set location = new st_point(longitude, latitude, 4326)
+    where location is null
+end
+}
+go
+
+create procedure "DBA"."export_barcelona_districts_kml"( in @survey_id integer ) 
+begin
+  declare @result xml;
+  declare @filename varchar(255);
+  set @filename = './kml/survey_' || convert(varchar(4),@survey_id) || '.kml';
+  select '<?xml version="1.0" encoding="UTF-8"?>  \x0A    <kml xmlns="http://www.opengis.net/kml/2.2">  \x0A    <Document>\x0A    '
+     || "LIST"(
+    "XMLGEN"(
+    '  \x0A  <Placemark>  \x0A  <name>{$nistrict</name>  \x0A  <ExtendedData>\x0A  <Data name="listings">\x0A    <value>{$listings}</value>\x0A  </Data> \x0A  <Data name="relative_income">\x0A      <value>{$relative_income}</value>\x0A  </Data> \x0A  </ExtendedData>\x0A  .ST_AsKML()\x0A  </Placemark>',
+    "room_id","room_type","host_id",
+    "price","income",
+    "rank","lon","lat"),null)
+     || '   \x0A   </Document>  \x0A</kml>'
+    into @result
+    from "room_income"(@survey_id);
+  call "xp_write_file"(@filename,@result)
+end
+go
+
+COMMENT ON PROCEDURE "DBA"."export_barcelona_districts_kml" IS 
+	'Export a survey in such a way that it can be imported into Google Fusion Tables.'
+go
+
+COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."export_barcelona_districts_kml" IS 
+'create PROCEDURE DBA."export_barcelona_districts_kml"( IN @survey_id INTEGER )
+BEGIN  
+    DECLARE @result XML;  
+    DECLARE @filename VARCHAR(255);
+    SET @filename = ''./kml/survey_'' || convert(VARCHAR(4), @survey_id) || ''.kml'';
+  SELECT ''<?xml version="1.0" encoding="UTF-8"?>  
+    <kml xmlns="http://www.opengis.net/kml/2.2">  
+    <Document>
+    '' ||   
+  LIST(XMLGEN(''  
+  <Placemark>  
+  <name>{$nistrict</name>  
+  <ExtendedData>
+  <Data name="listings">
+    <value>{$listings}</value>
+  </Data> 
+  <Data name="relative_income">
+      <value>{$relative_income}</value>
+  </Data> 
+  </ExtendedData>
+  .ST_AsKML()
+  </Placemark>'', 
+    room_id, room_type, host_id, 
+    price, income,
+    "rank", lon, lat), NULL)  ||''   
+   </Document>  
+</kml>'' INTO @result  
+FROM room_income(@survey_id); 
+  CALL xp_write_file(@filename, @result);  
+END'
+go
+
+create procedure "DBA"."surviving_room"( in @old_survey_id integer,in @new_survey_id integer ) 
+result( "room_id" integer ) 
+begin
+  select "room_id"
+    from "survey_room"(@old_survey_id)
+    where "room_id" = any(
+    select "room_id" from "room" where "survey_id" = @old_survey_id intersect
+    select "room_id" from "room" where "survey_id" = @new_survey_id)
+end
+go
+
+COMMENT ON PROCEDURE "DBA"."surviving_room" IS 
+	'Rooms that are in both of two surveys'
+go
+
+COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."surviving_room" IS 
+{create PROCEDURE DBA."surviving_room"(@old_survey_id int, @new_survey_id int)
+result (room_id int)
+begin
+    select room_id 
+    from survey_room(@old_survey_id)
+    where room_id in
+        (
+        select room_id from room where survey_id = @old_survey_id
+        intersect
+        select room_id from room where survey_id = @new_survey_id
+        );
+end
+}
+go
+
+create procedure "DBA"."survival_indicators"( in @old_survey_id integer,in @new_survey_id integer ) 
+result( "old_survey_id" integer,"new_survey_id" integer,"Category" varchar(255),"number" integer,"mean_rating" real,"mean_reviews" real ) 
+begin
+  select @old_survey_id,@new_survey_id,
+    'exited',"count"() as "n",
+    "avg"("r"."overall_satisfaction") as "mean_rating",
+    "avg"("r"."reviews") as "mean_reviews"
+    from "lost_room"(@old_survey_id,@new_survey_id) as "lr" join "room" as "r"
+      on "lr"."room_id" = "r"."room_id"
+    where "r"."deleted" = 0
+    and "r"."overall_satisfaction" is not null
+    and "r"."price" is not null
+    and "r"."survey_id" = @old_survey_id union
+  select @old_survey_id,@new_survey_id,
+    'stayed',"count"() as "n",
+    "avg"("r"."overall_satisfaction") as "mean_rating",
+    "avg"("r"."reviews") as "mean_reviews"
+    from "surviving_room"(@old_survey_id,@new_survey_id) as "lr" join "room" as "r"
+      on "lr"."room_id" = "r"."room_id"
+    where "r"."deleted" = 0
+    and "r"."overall_satisfaction" is not null
+    and "r"."price" is not null
+    and "r"."survey_id" = @old_survey_id union
+  -- union 
+  -- select  @old_survey_id, @new_survey_id, 
+  --     'surviving rooms (new)', count(*) n,
+  -- avg(r.overall_satisfaction) mean_rating,
+  -- avg(r.reviews) mean_reviews 
+  -- from surviving_room(@old_survey_id, @new_survey_id) lr join room r
+  -- on lr.room_id = r.room_id
+  -- where r.deleted = 0 
+  -- and r.overall_satisfaction is not null
+  -- and r.price is not null
+  -- and r.survey_id = @new_survey_id
+  select @old_survey_id,@new_survey_id,
+    'new',"count"() as "n",
+    "avg"("r"."overall_satisfaction") as "mean_rating",
+    "avg"("r"."reviews") as "mean_reviews"
+    from "new_room"(@old_survey_id,@new_survey_id) as "lr" join "room" as "r"
+      on "lr"."room_id" = "r"."room_id"
+    where "r"."deleted" = 0
+    and "r"."overall_satisfaction" is not null
+    and "r"."price" is not null
+    and "r"."survey_id" = @new_survey_id
+end
+go
+
+COMMENT TO PRESERVE FORMAT ON PROCEDURE "DBA"."survival_indicators" IS 
+{create PROCEDURE DBA."survival_indicators"(@old_survey_id int, @new_survey_id int)
+result ( old_survey_id int, new_survey_id int, Category varchar(255), number int, mean_rating float, mean_reviews float )
+begin
+select @old_survey_id, @new_survey_id, 
+    'exited', count(*) n,
+avg(r.overall_satisfaction) mean_rating,
+avg(r.reviews) mean_reviews
+from lost_room(@old_survey_id, @new_survey_id) lr join room r
+on lr.room_id = r.room_id
+where r.deleted = 0 
+and r.overall_satisfaction is not null
+and r.price is not null
+and r.survey_id = @old_survey_id
+union 
+select  @old_survey_id, @new_survey_id, 
+    'stayed', count(*) n,
+avg(r.overall_satisfaction) mean_rating,
+avg(r.reviews) mean_reviews 
+from surviving_room(@old_survey_id, @new_survey_id) lr join room r
+on lr.room_id = r.room_id
+where r.deleted = 0 
+and r.overall_satisfaction is not null
+and r.price is not null
+and r.survey_id = @old_survey_id
+-- union 
+-- select  @old_survey_id, @new_survey_id, 
+--     'surviving rooms (new)', count(*) n,
+-- avg(r.overall_satisfaction) mean_rating,
+-- avg(r.reviews) mean_reviews 
+-- from surviving_room(@old_survey_id, @new_survey_id) lr join room r
+-- on lr.room_id = r.room_id
+-- where r.deleted = 0 
+-- and r.overall_satisfaction is not null
+-- and r.price is not null
+-- and r.survey_id = @new_survey_id
+union 
+select  @old_survey_id, @new_survey_id, 
+    'new', count(*) n,
+avg(r.overall_satisfaction) mean_rating,
+avg(r.reviews) mean_reviews 
+from new_room(@old_survey_id, @new_survey_id) lr join room r
+on lr.room_id = r.room_id
+where r.deleted = 0 
+and r.overall_satisfaction is not null
+and r.price is not null
+and r.survey_id = @new_survey_id
+end
+}
 go
 
 begin 
@@ -50982,4 +51262,7 @@ SET OPTION PUBLIC.preserve_source_format =
 go
 
 SET OPTION "PUBLIC"."preserve_source_format"='On'
+go
+
+SET OPTION "DBA"."allow_write_client_file"='ON'
 go
